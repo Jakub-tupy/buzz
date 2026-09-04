@@ -1,5 +1,10 @@
 name: Windows Canary
 
+# FORK-LOCAL VARIANT (branch canary/windows-both-fixes): the block/buzz
+# repository guard and the main-only gate are removed, and the timeout is
+# raised for a cold cache, so a fork can build a test installer from a
+# feature branch. Do not upstream this file.
+#
 # Produces an unsigned Windows NSIS installer from main without creating
 # a tag, GitHub Release, or auto-updater artifact. The installer is available
 # only as a short-lived GitHub Actions artifact for explicit testing.
@@ -16,24 +21,13 @@ permissions:
 jobs:
   build:
     name: Build Windows canary
-    if: github.repository == 'block/buzz'
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 300
     permissions:
       contents: read
     env:
       TARGET: x86_64-pc-windows-msvc
     steps:
-      - name: Require main
-        shell: bash
-        env:
-          SOURCE_REF: ${{ github.ref }}
-        run: |
-          if [[ "$SOURCE_REF" != "refs/heads/main" ]]; then
-            echo "::error::Canary builds must run from main; got $SOURCE_REF"
-            exit 1
-          fi
-
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
