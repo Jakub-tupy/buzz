@@ -135,6 +135,10 @@ jobs:
       # BUZZ_PROTECTED_BUILD_OUTPUT is unset, so beforeBuildCommand writes the
       # selected variant to desktop/dist, which is what `frontendDist` in
       # tauri.conf.json already points to.
+      - name: Clear stale bundle output
+        shell: bash
+        run: rm -rf "desktop/src-tauri/target/${TARGET}/release/bundle"
+
       - name: Build Windows NSIS installer (unsigned)
         shell: bash
         run: cd desktop && pnpm exec tauri build --verbose --target "$TARGET" --bundles nsis
@@ -152,16 +156,31 @@ jobs:
             echo "::error::buzz-desktop.exe embeds no frontend assets - refusing to publish this installer"
             exit 1
           fi
+          TRAY=$(grep -a -c -o "buzz-tray-windows" "$EXE" || true)
+          echo "windows tray id hits: $TRAY"
+          if [[ "${TRAY:-0}" -lt 1 ]]; then
+            echo "::error::buzz-desktop.exe was built without the Windows tray - stale build tree"
+            exit 1
+          fi
 
       - name: Locate NSIS installer
         id: artifact
         shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           BUNDLE_DIR="desktop/src-tauri/target/${TARGET}/release/bundle"
-          EXE=$(find "$BUNDLE_DIR/nsis" -name '*.exe' -type f | head -1)
-          if [[ -z "$EXE" ]]; then
-            echo "::error::No NSIS installer found in $BUNDLE_DIR/nsis"
+          EXE="$BUNDLE_DIR/nsis/Buzz_${VERSION}_x64-setup.exe"
+          if [[ ! -f "$EXE" ]]; then
+            echo "::error::Expected installer $EXE was not produced"
+            ls -la "$BUNDLE_DIR/nsis" || true
+            exit 1
+          fi
+          FOUND=$(find "$BUNDLE_DIR/nsis" -name '*.exe' -type f | wc -l)
+          if [[ "$FOUND" -ne 1 ]]; then
+            echo "::error::$FOUND installers in $BUNDLE_DIR/nsis; refusing to guess"
+            ls -la "$BUNDLE_DIR/nsis"
             exit 1
           fi
           echo "exe=$EXE" >> "$GITHUB_OUTPUT"
