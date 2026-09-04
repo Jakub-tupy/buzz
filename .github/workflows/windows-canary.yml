@@ -106,7 +106,7 @@ jobs:
             --target x86_64-pc-windows-msvc \
             --features default \
             --native-inputs "$NATIVE_TOOLCHAIN_ID")
-          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          echo "key=$KEY-frontendfix" >> "$GITHUB_OUTPUT"
           echo "Release cache key: $KEY"
 
       - name: Restore exact release Cargo cache
@@ -127,9 +127,17 @@ jobs:
           cargo build --release --target "$TARGET" -p buzz-acp -p buzz-agent -p buzz-dev-mcp -p git-credential-nostr -p buzz-cli
           ./scripts/bundle-sidecars.sh "$TARGET"
 
+      # Call the Tauri CLI directly instead of `pnpm tauri`. The repo's
+      # desktop/scripts/tauri-command.mjs wrapper (added in #6902) points
+      # `frontendDist` at a private temp directory, and that override never
+      # reaches the asset codegen: the resulting binary embeds no frontend and
+      # the app dies on `ERR_FILE_NOT_FOUND`. Without the wrapper,
+      # BUZZ_PROTECTED_BUILD_OUTPUT is unset, so beforeBuildCommand writes the
+      # selected variant to desktop/dist, which is what `frontendDist` in
+      # tauri.conf.json already points to.
       - name: Build Windows NSIS installer (unsigned)
         shell: bash
-        run: cd desktop && pnpm tauri build --target "$TARGET" --bundles nsis
+        run: cd desktop && pnpm exec tauri build --verbose --target "$TARGET" --bundles nsis
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
 
