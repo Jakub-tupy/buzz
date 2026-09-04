@@ -121,17 +121,6 @@ jobs:
             !desktop/src-tauri/target/**/release/bundle
           key: ${{ steps.rust_cache_key.outputs.key }}
 
-      - name: Generate non-updating bundle config
-        shell: bash
-        run: |
-          cat > desktop/src-tauri/tauri.canary.conf.json <<'JSON'
-          {
-            "bundle": {
-              "createUpdaterArtifacts": false
-            }
-          }
-          JSON
-
       - name: Build sidecars
         shell: bash
         run: |
@@ -140,9 +129,21 @@ jobs:
 
       - name: Build Windows NSIS installer (unsigned)
         shell: bash
-        run: cd desktop && pnpm tauri build --target "$TARGET" --bundles nsis --config src-tauri/tauri.canary.conf.json
+        run: cd desktop && pnpm tauri build --target "$TARGET" --bundles nsis
         env:
           CMAKE_POLICY_VERSION_MINIMUM: "3.5"
+
+      - name: Verify the frontend was embedded
+        shell: bash
+        run: |
+          set -euo pipefail
+          EXE="desktop/src-tauri/target/${TARGET}/release/buzz-desktop.exe"
+          COUNT=$(grep -a -c -o "assets/" "$EXE" || true)
+          echo "asset key hits: $COUNT"
+          if [[ "${COUNT:-0}" -lt 1 ]]; then
+            echo "::error::buzz-desktop.exe embeds no frontend assets - refusing to publish this installer"
+            exit 1
+          fi
 
       - name: Locate NSIS installer
         id: artifact
