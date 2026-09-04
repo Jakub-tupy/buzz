@@ -49,6 +49,8 @@ mod terminal_runtime;
 mod terminal_transport;
 #[cfg(target_os = "macos")]
 mod tray_menu;
+#[cfg(target_os = "windows")]
+mod tray_windows;
 mod unread_catch_up;
 mod util;
 #[cfg(target_os = "linux")]
@@ -240,6 +242,10 @@ pub fn run() {
             {
                 tray_menu::init(&app_handle)?;
                 macos_notifications::init(&app_handle)?;
+            }
+            #[cfg(target_os = "windows")]
+            {
+                tray_windows::init(&app_handle);
             }
 
             // ── Phase 2: boot-time sentinel wipe ──────────────────────────────
@@ -883,17 +889,26 @@ pub fn run() {
     app.run(move |app_handle, event| match event {
         #[cfg(target_os = "macos")]
         RunEvent::Reopen { .. } => show_main_window(app_handle),
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         RunEvent::WindowEvent {
             label,
             event: WindowEvent::CloseRequested { api, .. },
             ..
         } if label == "main" => {
-            // Keep the webview alive so Buzz can be reopened from its tray menu.
-            api.prevent_close();
-            if let Some(window) = app_handle.get_webview_window("main") {
-                if let Err(error) = window.hide() {
-                    eprintln!("buzz-desktop: failed to hide main window: {error}");
+            // Keep the webview alive so Buzz can be reopened from its tray menu
+            // — on Windows this is what keeps background notifications alive
+            // after the window is closed. Only ever hide while a tray icon
+            // exists to bring the window back.
+            #[cfg(target_os = "macos")]
+            let hide_to_tray = true;
+            #[cfg(target_os = "windows")]
+            let hide_to_tray = tray_windows::hide_to_tray_enabled();
+            if hide_to_tray {
+                api.prevent_close();
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    if let Err(error) = window.hide() {
+                        eprintln!("buzz-desktop: failed to hide main window: {error}");
+                    }
                 }
             }
         }
